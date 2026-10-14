@@ -134,7 +134,7 @@ function formatDataForDataPortal() {
 
     let eCount = empCounts[`${loc}_${dep}`] || 0;
     let rCount = responseCounts[`${ym}_${loc}_${dep}`] || 0;
-    let denominator = days * eCount;
+    let denominator = days * eCount; // ★修正済み
     let rate = denominator > 0 ? (rCount / denominator) : 0;
 
     summaryData.push([ym, loc, dep, days, eCount, denominator, rCount, rate]);
@@ -146,5 +146,52 @@ function formatDataForDataPortal() {
   
   summarySheet.clear();
   summarySheet.getRange(1, 1, summaryData.length, summaryData[0].length).setValues(summaryData);
-  if (summaryData.length > 1) summarySheet.getRange(2, 8, summaryData.length - 1, 1).setNumberFormat('0.0%');
+  if (summaryData.length > 1) {
+    summarySheet.getRange(2, 8, summaryData.length - 1, 1).setNumberFormat('0.0%'); // ★修正済み
+  }
+
+  // =========================================================
+  // 【追加】出勤日数の最終日チェックとアラートメール送信
+  // =========================================================
+  // ★スクリプトプロパティからメールアドレスを取得
+  const targetEmail = PropertiesService.getScriptProperties().getProperty('TargetMailaddress'); 
+
+  if (!targetEmail) {
+    console.error('スクリプトプロパティに「TargetMailaddress」が設定されていません。');
+    return; 
+  }
+  
+  const lastRow = daysSheet.getLastRow();
+  
+  if (lastRow > 1) {
+    // A列（1列目）の最終行の値を取得
+    const lastDateVal = daysSheet.getRange(lastRow, 1).getValue();
+    const lastDate = new Date(lastDateVal);
+    
+    // 取得した値が正しく日付として認識できる場合のみ処理
+    if (!isNaN(lastDate.getTime())) {
+      const today = new Date();
+      
+      // 時間の影響をなくし、純粋に「日付」だけで計算するために時刻を0にリセット
+      today.setHours(0, 0, 0, 0);
+      lastDate.setHours(0, 0, 0, 0);
+      
+      // 差分（ミリ秒）を日数に変換
+      const diffTime = lastDate.getTime() - today.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // ★修正済み
+      
+      // 残り日数が2000日を切った場合（テスト用の設定）
+      if (diffDays < 30) {
+        const subject = '振り返り集計出勤日数の追加';
+        const body = '振り返り集計のスプシ、出勤日数を追加する必要があります';
+        
+        MailApp.sendEmail({
+          to: targetEmail,
+          subject: subject,
+          body: body
+        });
+        console.log(`アラートメールを送信しました。最終日付: ${Utilities.formatDate(lastDate, "JST", "yyyy/MM/dd")} (残り ${diffDays} 日)`);
+      }
+    }
+  }
 }
